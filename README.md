@@ -49,6 +49,18 @@ A Model Context Protocol (MCP) server that provides tools for controlling both i
 
 ## Configuration
 
+### Running the Server
+
+The server now uses HTTP streaming transport by default, which allows multiple clients to connect simultaneously. Start the server:
+
+```bash
+python3 ios_interact_server.py
+```
+
+The server will run on port 6274 by default. You can verify it's running by visiting http://localhost:6274/mcp in your browser.
+
+### Claude Code Configuration
+
 Add the server to your Claude Code configuration file:
 
 **Location:** `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -66,6 +78,13 @@ Add the server to your Claude Code configuration file:
 ```
 
 Replace `/path/to/ios_interact_server.py` with the actual path where you saved the server file.
+
+### HTTP Streaming Benefits
+
+- **Multiple Connections**: Unlike stdio transport, HTTP streaming allows multiple Claude Code instances to connect simultaneously
+- **Remote Access**: Can be accessed from other machines on your network
+- **Better Debugging**: HTTP endpoints can be tested with curl or browser
+- **Bi-directional Communication**: Server can send notifications back to clients
 
 ## Available Tools
 
@@ -173,6 +192,10 @@ chmod +x ios_interact_server.py
 1. Check that the path in `claude_desktop_config.json` is absolute and correct
 2. Verify Python 3 is installed: `python3 --version`
 3. Check Claude Code logs for error messages
+4. For HTTP streaming issues:
+   - Verify the server is running: `curl http://localhost:6274/mcp`
+   - Check if port 6274 is available: `lsof -i :6274`
+   - Try a different port if needed by modifying the server code
 
 ## Extending the Server
 
