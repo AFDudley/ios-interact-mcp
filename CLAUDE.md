@@ -1,128 +1,101 @@
 # iOS Device Interaction via MCP Server
 
-## Project Overview
-Creating a Python-based MCP (Model Context Protocol) server to control both iOS Simulator and real iOS devices from Claude Code, enabling automated testing and interaction with iOS apps.
+## Current Session Summary (2025-01-24)
 
-## Key Components
+### Work Completed
 
-### 1. MCP Server (`ios_interact_server.py`)
-- Python-based server using the official MCP SDK
-- Provides tools for iOS Simulator control via `xcrun simctl`
-- Supports real device control via `xcrun devicectl`
-- Async implementation for better performance
-- No external dependencies beyond Python and macOS tools
+1. **Removed Non-Existent Features**
+   - ✅ Removed `tap` and `swipe` commands that don't exist in `xcrun simctl`
+   - ✅ Updated documentation to remove references to these commands
 
-### 2. Available Tools
-- `launch_app` - Launch iOS apps by bundle ID (simulator & device)
-- `terminate_app` - Stop running apps (simulator & device)
-- `screenshot` - Capture screen (simulator & device)
-- `list_apps` - Show installed applications (simulator & device)
-- `open_url` - Open URLs (deep linking support) (simulator & device)
-- `get_app_container` - Access app file system (simulator & device)
-- `list_devices` - List available simulators and connected devices
-- `select_device` - Switch between simulator and real devices
+2. **Implemented ocrmac Integration (Partial)**
+   - ✅ Window detection using osascript (`SimulatorWindowManager`)
+   - ✅ Screenshot capture via `screencapture` command
+   - ✅ OCR text finding using ocrmac library (`OCRTextFinder`)
+   - ✅ Added `list_simulator_windows` tool
+   - ✅ Added `find_text_in_simulator` tool
 
-### 3. Configuration
-Location: `~/Library/Application Support/Claude/claude_desktop_config.json`
-```json
-{
-  "mcpServers": {
-    "ios-interact": {
-      "command": "python3",
-      "args": ["/path/to/ios_interact_server.py"],
-      "env": {}
-    }
-  }
-}
-```
+### Current State
 
-## Technical Decisions
+The server now has:
+- Working window detection for simulators
+- Screenshot capture of specific simulator windows
+- OCR capability to find text in screenshots
+- No broken tap/swipe functionality
 
-### Why MCP Server?
-- Clean, versioned API for Claude Code
-- Better error handling than raw shell scripts
-- Structured tool interface
-- Follows Claude Code integration patterns
+### Completed Features
 
-### Why Python?
-- Native async support
-- Simple subprocess handling
-- Stock macOS Python 3 compatibility
-- Official MCP SDK available
+1. ✅ **Click Functionality (Step 4)**
+   - Implemented osascript-based clicking at screen coordinates
+   - Added coordinate transformation from screenshot space to screen space
+   - Tested clicking on actual UI elements (General button in Settings)
 
-### Simulator vs Real Device
-- Both simulators and real devices fully supported
-- Simulators use `xcrun simctl` commands
-- Real devices use `xcrun devicectl` commands
-- Automatic detection and switching between device types
-- App Store limitations on both platforms
+2. ✅ **Integrated click_text Tool (Step 5)**
+   - Combined OCR text finding with clicking
+   - Handles multiple text matches with occurrence parameter
+   - Supports device targeting for multiple simulators
 
-## Challenges & Solutions
+3. ✅ **Core MCP Tools Available**
+   - `click_text` - Click on text found via OCR
+   - `click_at_coordinates` - Click at specific screen/device coordinates
+   - `find_text_in_simulator` - Find text elements using OCR
+   - `list_simulator_windows` - List all simulator windows
 
-### Challenge: App Store Access
-- **Problem**: Cannot download apps from App Store in Simulator
-- **Solution**: Apps must be installed via Xcode, .app bundles, or built from source
+### Remaining Tasks
 
-### Challenge: UI Automation
-- **Current**: Basic app lifecycle control
-- **Future**: Consider computer vision for screenshot-based automation
-- **Alternative**: Integrate with XCTest or Appium
+1. **xcrun command passthrough for copy/paste** (Low priority)
+2. **Enhanced error handling** (Low priority)
+3. **Performance optimizations** (Future enhancement)
 
-### Challenge: Testing a-Shell
-- **Solution**: Build from source (https://github.com/holzschu/a-Shell)
-- URL scheme support for command execution
-- File system access via app containers
+### Important Files to Read
 
-## Implementation Status
+When continuing this work, read these files in order:
 
-### Completed ✓
-- Basic MCP server structure
-- Core simulator control tools
-- Real device support integration
-- Device detection and switching
-- Comprehensive documentation
-- Error handling
+1. **OSASCRIPT_PLAN.md** - Overview of the osascript integration approach
+2. **OCRMAC_IMPLEMENTATION_PLAN.md** - Detailed plan for ocrmac integration
+3. **ios_interact_server.py** - Current implementation with partial ocrmac support
+4. **test_*.py** - Test files showing how each component works
 
-### Future Enhancements
-- [x] Real device support (`devicectl` integration)
-- [ ] Video recording capabilities
-- [ ] Computer vision for UI element detection
-- [ ] Higher-level workflow automation
-- [ ] Push notification simulation
-- [ ] Location/hardware simulation
-- [ ] Device pairing and trust management
-- [ ] Performance monitoring and profiling
+### Known Issues
 
-## Usage Examples
+- ✅ Fixed: OCR tuple format parsing corrected
+- ✅ Fixed: Coordinate transformation implemented  
+- ✅ Fixed: Click functionality working
+- ⚠️ Minor: Success detection for osascript clicks could be improved
+- Note: Permissions must be granted for osascript to control System Events
+
+### Dependencies
 
 ```bash
-# In Claude Code after configuration
-use ios-interact
-
-# Launch Safari
-launch_app bundle_id="com.apple.mobilesafari"
-
-# Take screenshot
-screenshot filename="test_screen.png"
-
-# Open deep link
-open_url url="myapp://section/details"
-
-# Get app data location
-get_app_container bundle_id="com.example.app"
+pip install mcp ocrmac
 ```
 
-## Resources
+### Testing Progress
 
-- MCP Python SDK: https://github.com/modelcontextprotocol/python-sdk
-- xcrun simctl documentation: `man xcrun-simctl`
-- a-Shell repository: https://github.com/holzschu/a-Shell
+- ✅ Window detection tested and working
+- ✅ Screenshot capture tested and working  
+- ✅ OCR library installed and integrated
+- ✅ OCR text finding working with proper tuple format parsing
+- ✅ Click functionality implemented and tested
+- ✅ Coordinate transformation working (screenshot to screen coordinates)
+- ✅ Full integration tested (OCR → coordinate transform → click)
 
-## Next Steps
+### Architecture Notes
 
-1. Install MCP Python SDK: `pip install mcp`
-2. Save server file and configure Claude Code
-3. Test with iOS Simulator
-4. Connect real iOS device and test device control
-5. Build a-Shell from source for testing
-6. Extend server based on specific automation needs
+The approach uses:
+1. **osascript** - For window management and clicking
+2. **screencapture** - For capturing simulator windows
+3. **ocrmac** - For OCR text detection
+4. **No simctl tap** - This command doesn't exist, using osascript instead
+
+This avoids relying on non-existent simctl commands while providing robust UI automation.
+
+### Platform Requirements
+
+**This codebase is macOS-specific and will always target macOS only.** The implementation relies on:
+- AppleScript/osascript for UI automation
+- macOS-specific screenshot tools
+- System Events accessibility permissions
+- iOS Simulator (macOS exclusive)
+
+No cross-platform compatibility is needed or planned.

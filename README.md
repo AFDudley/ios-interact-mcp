@@ -1,256 +1,251 @@
 # iOS Interact MCP Server
 
-A Model Context Protocol (MCP) server that provides tools for controlling both iOS Simulator and real iOS devices via `xcrun simctl` and `xcrun devicectl` commands. This server enables Claude Code to interact with iOS apps on simulators and physical devices on macOS.
+Control iOS simulators and devices through the Model Context Protocol (MCP).
 
 ## Features
 
-- Launch and terminate iOS apps on simulators and real devices
-- Take screenshots of simulators and devices
-- List installed apps
-- Open URLs (for deep linking)
-- Access app container paths
-- List available simulators and connected devices
-- Automatic device detection and switching
-- All operations use native macOS tools (no additional dependencies beyond Python)
+- **Click Actions**: Click on UI elements by text or coordinates using OCR
+- **App Control**: Launch and terminate iOS applications
+- **Screenshots**: Capture simulator screenshots with OCR support
+- **Text Finding**: Find and interact with text elements using OCR
+- **Deep Linking**: Open URLs in the simulator
+- **Hardware Buttons**: Simulate hardware button presses
+- **Window Management**: List and control simulator windows
 
 ## Requirements
 
 - macOS with Xcode installed
-- Python 3.8 or later
-- iOS Simulator running (for simulator features)
-- iOS device connected via USB (for device features)
-- MCP Python SDK
+- Python 3.10 or higher
+- iOS Simulator or connected iOS device
+- MCP-compatible client (e.g., Claude Desktop)
 
 ## Installation
 
-1. **Install the MCP Python SDK:**
-   ```bash
-   pip install mcp
-   ```
+### Via pip
 
-2. **Download the server file:**
-   Save `ios_interact_server.py` to a location on your system (e.g., `~/tools/ios-interact-mcp/`)
+```bash
+pip install ios-interact-mcp
+```
 
-3. **Make the server executable:**
-   ```bash
-   chmod +x ios_interact_server.py
-   ```
+### From source
 
-4. **For simulator usage:**
-   Open Xcode and start an iOS Simulator, or use:
-   ```bash
-   open -a Simulator
-   ```
-
-5. **For real device usage:**
-   - Connect your iOS device via USB
-   - Trust the computer on your device when prompted
-   - Ensure developer mode is enabled on the device
+```bash
+git clone https://github.com/AFDudley/ios-interact-mcp.git
+cd ios-interact-mcp
+pip install -e .
+```
 
 ## Configuration
 
-### Running the Server
+### Claude Desktop
 
-The server now uses HTTP streaming transport by default, which allows multiple clients to connect simultaneously. Start the server:
-
-```bash
-python3 ios_interact_server.py
-```
-
-The server will run on port 6274 by default. You can verify it's running by visiting http://localhost:6274/mcp in your browser.
-
-### Claude Code Configuration
-
-Add the server to your Claude Code configuration file:
-
-**Location:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "ios-interact": {
-      "command": "python3",
-      "args": ["/path/to/ios_interact_server.py"],
-      "env": {}
+      "command": "ios-interact-mcp"
     }
   }
 }
 ```
 
-Replace `/path/to/ios_interact_server.py` with the actual path where you saved the server file.
+### Standalone Usage
 
-### HTTP Streaming Benefits
+```bash
+# Run with stdio transport (default)
+ios-interact-mcp
 
-- **Multiple Connections**: Unlike stdio transport, HTTP streaming allows multiple Claude Code instances to connect simultaneously
-- **Remote Access**: Can be accessed from other machines on your network
-- **Better Debugging**: HTTP endpoints can be tested with curl or browser
-- **Bi-directional Communication**: Server can send notifications back to clients
+# Run with SSE transport for debugging
+ios-interact-mcp --transport sse
+```
 
 ## Available Tools
 
-### list_devices
-List all available iOS simulators and connected devices.
-- **Parameters:** None
+### click_text
+Click on text found in the simulator using OCR.
 
-### select_device
-Select a specific device or simulator to use for subsequent operations.
-- **Parameters:**
-  - `device_id` (string, required): Device identifier (UDID or name)
+```typescript
+click_text(text: string, occurrence?: number, device_name?: string)
+```
+
+### click_at_coordinates
+Click at specific screen coordinates.
+
+```typescript
+click_at_coordinates(x: number, y: number, coordinate_space?: "screen" | "device")
+```
 
 ### launch_app
-Launch an iOS app on the selected device or simulator.
-- **Parameters:**
-  - `bundle_id` (string, required): Bundle ID of the app to launch
-  - `device_id` (string, optional): Specific device to use (overrides selected device)
+Launch an iOS application.
+
+```typescript
+launch_app(bundle_id: string)
+```
 
 ### terminate_app
-Terminate a running iOS app.
-- **Parameters:**
-  - `bundle_id` (string, required): Bundle ID of the app to terminate
-  - `device_id` (string, optional): Specific device to use (overrides selected device)
+Terminate a running iOS application.
+
+```typescript
+terminate_app(bundle_id: string)
+```
 
 ### screenshot
-Take a screenshot of the iOS device or simulator.
-- **Parameters:**
-  - `filename` (string, optional): Output filename (defaults to timestamp)
-  - `return_path` (boolean, optional): Return full path in response (default: true)
-  - `device_id` (string, optional): Specific device to use (overrides selected device)
+Take a screenshot of the simulator.
+
+```typescript
+screenshot(filename?: string, return_path?: boolean)
+```
+
+### find_text_in_simulator
+Find text elements in the simulator using OCR.
+
+```typescript
+find_text_in_simulator(search_text?: string, device_name?: string)
+```
 
 ### list_apps
-List all installed apps on the device or simulator.
-- **Parameters:**
-  - `device_id` (string, optional): Specific device to use (overrides selected device)
+List all installed applications.
+
+```typescript
+list_apps()
+```
 
 ### open_url
-Open a URL on the device or simulator (useful for deep linking).
-- **Parameters:**
-  - `url` (string, required): URL to open
-  - `device_id` (string, optional): Specific device to use (overrides selected device)
+Open a URL in the simulator (for deep linking).
 
-### get_app_container
-Get the app container path for file access.
-- **Parameters:**
-  - `bundle_id` (string, required): Bundle ID of the app
-  - `container_type` (string, optional): Container type - "app", "data", or "groups" (default: "data")
-  - `device_id` (string, optional): Specific device to use (overrides selected device)
+```typescript
+open_url(url: string)
+```
+
+### press_button
+Press a hardware button.
+
+```typescript
+press_button(button_name: "home" | "lock" | "volume_up" | "volume_down")
+```
+
+### list_simulator_windows
+List all simulator windows with their positions and sizes.
+
+```typescript
+list_simulator_windows()
+```
 
 ## Usage Examples
 
-Once configured, you can use these commands in Claude Code:
+### Basic Automation
 
-```bash
-# List available devices
-use ios-interact
-list_devices
+```python
+# Click on Settings app
+await click_text("Settings")
 
-# Select a device
-select_device device_id="iPhone-15-Pro"
-
-# Launch an app
-launch_app bundle_id="com.apple.mobilesafari"
+# Navigate to General
+await click_text("General")
 
 # Take a screenshot
-screenshot filename="current_screen.png"
-
-# List all installed apps
-list_apps
-
-# Open a deep link
-open_url url="myapp://section/details"
-
-# Get app data container path
-get_app_container bundle_id="com.mycompany.myapp"
+await screenshot("general_settings.png")
 ```
+
+### App Testing
+
+```python
+# Launch your app
+await launch_app("com.yourcompany.yourapp")
+
+# Click on UI elements
+await click_text("Login")
+
+# Enter deep link
+await open_url("yourapp://profile")
+
+# Capture state
+await screenshot("profile_screen.png")
+```
+
+## Permissions
+
+For OCR functionality to work properly, you need to grant accessibility permissions:
+
+1. Go to System Preferences > Security & Privacy > Accessibility
+2. Add Terminal (or your IDE) to the allowed applications
+3. Restart the application if needed
+
+## Development
+
+### Setup Development Environment
+
+```bash
+# Clone the repository
+git clone https://github.com/AFDudley/ios-interact-mcp.git
+cd ios-interact-mcp
+
+# Install in development mode with dev dependencies
+pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+python -m pytest tests/
+
+# Run specific test
+python -m pytest tests/test_ocr_controller.py
+```
+
+### Code Quality
+
+The project uses:
+- **Black** for code formatting
+- **Flake8** for linting
+- **Pyright** for type checking
+
+These are automatically run on commit via pre-commit hooks.
 
 ## Troubleshooting
 
-### "No booted devices" error
-Make sure iOS Simulator is running. You can start it with:
+### OCR Not Working
+
+1. Ensure you have granted accessibility permissions to Terminal/your IDE
+2. Check that the simulator window is visible and not minimized
+3. Verify ocrmac is installed: `pip install ocrmac`
+
+### Click Actions Failing
+
+1. Verify the simulator is in focus
+2. Ensure the target text is visible on screen
+3. Try using `find_text_in_simulator` first to verify OCR is working
+
+### "No booted devices" Error
+
+Make sure iOS Simulator is running:
 ```bash
 open -a Simulator
 ```
 
-### App not found errors
-Verify the bundle ID is correct using:
-```bash
-xcrun simctl listapps booted
-```
+### Permission Errors
 
-### Permission errors
-Ensure the Python script has execute permissions:
-```bash
-chmod +x ios_interact_server.py
-```
-
-### Real device connection issues
-1. Ensure the device is connected via USB
-2. Trust the computer on your device
-3. Enable developer mode in Settings > Privacy & Security > Developer Mode
-4. Check device connection: `xcrun devicectl list devices`
-
-### MCP connection issues
-1. Check that the path in `claude_desktop_config.json` is absolute and correct
-2. Verify Python 3 is installed: `python3 --version`
-3. Check Claude Code logs for error messages
-4. For HTTP streaming issues:
-   - Verify the server is running: `curl http://localhost:6274/mcp`
-   - Check if port 6274 is available: `lsof -i :6274`
-   - Try a different port if needed by modifying the server code
-
-## Extending the Server
-
-The server is designed to be easily extensible. To add new tools:
-
-1. Add the tool definition to the `list_tools()` function
-2. Add the implementation in the `call_tool()` function
-3. Use the appropriate controller method:
-   - `SimulatorController.run_command_async()` for simulator commands
-   - `DeviceController.run_command_async()` for real device commands
-
-Example of adding a new tool:
-```python
-# In list_tools()
-Tool(
-    name="set_location",
-    description="Set the simulator location",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "latitude": {"type": "number"},
-            "longitude": {"type": "number"}
-        },
-        "required": ["latitude", "longitude"]
-    }
-)
-
-# In call_tool()
-elif name == "set_location":
-    lat = arguments["latitude"]
-    lon = arguments["longitude"]
-    success, output = await controller.run_command_async([
-        "location", "booted", "set", f"{lat},{lon}"
-    ])
-    return [TextContent(type="text", text=f"Location set to {lat},{lon}" if success else f"Error: {output}")]
-```
-
-## License
-
-MIT License - Feel free to modify and distribute as needed.
+Grant necessary permissions in System Preferences > Security & Privacy > Accessibility
 
 ## Contributing
 
-Contributions are welcome! Some ideas for enhancements:
-- Add video recording support for devices and simulators
-- Implement device shake/rotation commands
-- Add push notification sending
-- Create higher-level workflow tools
-- Add UI element detection via screenshots
-- Implement device pairing and trust management
-- Add performance monitoring capabilities
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## Support
+## License
 
-For issues specific to:
-- This MCP server: Create an issue in the repository
-- MCP SDK: Visit https://github.com/modelcontextprotocol/python-sdk
-- Claude Code: Visit https://support.anthropic.com
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Built on the [Model Context Protocol](https://modelcontextprotocol.io/)
+- Uses [ocrmac](https://github.com/straussmaximilian/ocrmac) for OCR functionality
+- Powered by Apple's Vision framework and xcrun tools
