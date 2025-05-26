@@ -16,3 +16,4 @@ repos:
     rev: v1.1.389
     hooks:
       - id: pyright
+        additional_dependencies: [ocrmac, pillow, mcp, pytest]

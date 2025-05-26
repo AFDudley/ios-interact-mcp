@@ -160,17 +160,9 @@ async def observe_simulator() -> SimulatorObservation:
 
     windows = await observe_windows()
 
-    # Check fullscreen state by reading menu
-    try:
-        result = await execute_osascript("check_fullscreen_menu.applescript")
-        is_fullscreen = "Exit Full Screen" in result.stdout
-    except Exception as e:
-        # If we can't read the menu, fail fast
-        raise RuntimeError(f"Failed to read fullscreen menu state: {e}")
-
     return SimulatorObservation(
         windows=windows,
-        is_fullscreen=is_fullscreen,
+        is_fullscreen=False,  # Always False since we're not using fullscreen
         active_window=windows[0] if windows else None,
         timestamp=time.time(),
     )
@@ -230,7 +222,8 @@ async def execute_screenshot(action: ScreenshotAction) -> Screenshot:
     proc = await asyncio.create_subprocess_exec(
         "screencapture",
         "-R",
-        f"{action.window.bounds.x},{action.window.bounds.y},{action.window.bounds.width},{action.window.bounds.height}",
+        f"{action.window.bounds.x},{action.window.bounds.y},"
+        f"{action.window.bounds.width},{action.window.bounds.height}",
         str(action.output_path),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -311,128 +304,102 @@ async def find_text_in_simulator(
     search_text: Optional[str] = None, device_name: Optional[str] = None
 ) -> str:
     """Find text in simulator using functional approach."""
-    # Ensure fullscreen and track if we changed state
-    state_changed = await ensure_fullscreen()
+    # Observe current state
+    observation = await observe_simulator()
+
+    # Select target window
+    window = select_window(observation.windows, device_name)
+    if not window:
+        raise RuntimeError("No simulator windows found")
+
+    # Create screenshot action
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        screenshot_action = ScreenshotAction(window=window, output_path=Path(tmp.name))
 
     try:
-        # Observe current state
-        observation = await observe_simulator()
+        # Execute screenshot
+        screenshot = await execute_screenshot(screenshot_action)
 
-        # Select target window
-        window = select_window(observation.windows, device_name)
-        if not window:
-            raise RuntimeError("No simulator windows found")
+        # Perform OCR
+        matches = perform_ocr(screenshot.path, search_text)
 
-        # Create screenshot action
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            screenshot_action = ScreenshotAction(
-                window=window, output_path=Path(tmp.name)
-            )
-
-        try:
-            # Execute screenshot
-            screenshot = await execute_screenshot(screenshot_action)
-
-            # Perform OCR
-            matches = perform_ocr(screenshot.path, search_text)
-
-            # Format results
-            results = [
-                f"{'Found ' if search_text else ''}'{match.text}' at {match.bounds}"
-                for match in matches
-            ]
-            if not results:
-                return (
-                    f"Text '{search_text}' not found"
-                    if search_text
-                    else "No text found"
-                )
-            return "\n".join(results)
-
-        finally:
-            # Cleanup screenshot
-            if screenshot_action.output_path.exists():
-                os.unlink(screenshot_action.output_path)
+        # Format results
+        results = [
+            f"{'Found ' if search_text else ''}'{match.text}' at {match.bounds}"
+            for match in matches
+        ]
+        if not results:
+            return f"Text '{search_text}' not found" if search_text else "No text found"
+        return "\n".join(results)
 
     finally:
-        # Restore windowed mode if we changed it
-        if state_changed:
-            await exit_fullscreen()
+        # Cleanup screenshot
+        if screenshot_action.output_path.exists():
+            os.unlink(screenshot_action.output_path)
 
 
 async def click_text_in_simulator(
     text: str, occurrence: int = 1, device_name: Optional[str] = None
 ) -> None:
     """Click on text in simulator using functional approach."""
-    # Ensure fullscreen and track if we changed state
-    state_changed = await ensure_fullscreen()
+    # Observe current state
+    observation = await observe_simulator()
+
+    # Select target window
+    window = select_window(observation.windows, device_name)
+    if not window:
+        raise RuntimeError("No simulator windows found")
+
+    # Create screenshot action
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        screenshot_action = ScreenshotAction(window=window, output_path=Path(tmp.name))
 
     try:
-        # Observe current state
-        observation = await observe_simulator()
+        # Execute screenshot
+        screenshot = await execute_screenshot(screenshot_action)
 
-        # Select target window
-        window = select_window(observation.windows, device_name)
-        if not window:
-            raise RuntimeError("No simulator windows found")
+        # Perform OCR
+        matches = perform_ocr(screenshot.path, text)
 
-        # Create screenshot action
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            screenshot_action = ScreenshotAction(
-                window=window, output_path=Path(tmp.name)
+        if not matches:
+            raise ValueError(f"Text '{text}' not found in simulator")
+
+        if occurrence > len(matches):
+            raise ValueError(
+                f"Only {len(matches)} occurrences of '{text}' found, "
+                f"requested occurrence {occurrence}"
             )
 
-        try:
-            # Execute screenshot
-            screenshot = await execute_screenshot(screenshot_action)
+        # Get target match
+        target_match = matches[occurrence - 1]
 
-            # Perform OCR
-            matches = perform_ocr(screenshot.path, text)
+        # Get image dimensions for coordinate conversion
+        with Image.open(screenshot.path) as img:
+            image_width = img.width
+            image_height = img.height
 
-            if not matches:
-                raise ValueError(f"Text '{text}' not found in simulator")
+        # Calculate click point
+        # OCR coordinates are in screenshot pixel space (0,0 to width,height)
+        # We need to transform them to screen coordinates
+        screenshot_pixel_bounds = Rectangle(
+            x=0, y=0, width=image_width, height=image_height
+        )
+        click_point = calculate_click_point(
+            target_match, screenshot_pixel_bounds, window.bounds, image_height
+        )
 
-            if occurrence > len(matches):
-                raise ValueError(
-                    f"Only {len(matches)} occurrences of '{text}' found, requested occurrence {occurrence}"
-                )
+        # Create and execute click action
+        click_action = ClickAction(
+            screen_point=click_point,
+            description=f"Click on '{text}' (occurrence {occurrence})",
+        )
 
-            # Get target match
-            target_match = matches[occurrence - 1]
-
-            # Get image height for coordinate conversion
-            with Image.open(screenshot.path) as img:
-                image_height = img.height
-
-            # Calculate click point
-
-            # For fullscreen screenshots, we need to adjust for the window offset
-            # The OCR coordinates are relative to the screenshot (0,0), not the window position
-            screenshot_bounds_adjusted = Rectangle(
-                x=0, y=0, width=screenshot.bounds.width, height=screenshot.bounds.height
-            )
-
-            click_point = calculate_click_point(
-                target_match, screenshot_bounds_adjusted, window.bounds, image_height
-            )
-
-            # Create and execute click action
-            click_action = ClickAction(
-                screen_point=click_point,
-                description=f"Click on '{text}' (occurrence {occurrence})",
-            )
-
-            await execute_click(click_action)
-
-        finally:
-            # Cleanup screenshot
-            if screenshot_action.output_path.exists():
-                os.unlink(screenshot_action.output_path)
+        await execute_click(click_action)
 
     finally:
-        # Restore windowed mode if we changed it
-        if state_changed:
-            await exit_fullscreen()
+        # Cleanup screenshot
+        if screenshot_action.output_path.exists():
+            os.unlink(screenshot_action.output_path)
 
 
 async def click_at_coordinates(
@@ -539,29 +506,18 @@ async def open_settings_app() -> None:
 
 async def save_screenshot(output_path: str, device_name: Optional[str] = None) -> str:
     """Save a screenshot of the simulator."""
-    # Ensure fullscreen and track if we changed state
-    state_changed = await ensure_fullscreen()
+    # Observe current state
+    observation = await observe_simulator()
 
-    try:
-        # Observe current state
-        observation = await observe_simulator()
+    # Select target window
+    window = select_window(observation.windows, device_name)
+    if not window:
+        raise RuntimeError("No simulator windows found")
 
-        # Select target window
-        window = select_window(observation.windows, device_name)
-        if not window:
-            raise RuntimeError("No simulator windows found")
+    # Create screenshot action
+    screenshot_action = ScreenshotAction(window=window, output_path=Path(output_path))
 
-        # Create screenshot action
-        screenshot_action = ScreenshotAction(
-            window=window, output_path=Path(output_path)
-        )
+    # Execute screenshot
+    screenshot = await execute_screenshot(screenshot_action)
 
-        # Execute screenshot
-        screenshot = await execute_screenshot(screenshot_action)
-
-        return str(screenshot.path)
-
-    finally:
-        # Restore windowed mode if we changed it
-        if state_changed:
-            await exit_fullscreen()
+    return str(screenshot.path)

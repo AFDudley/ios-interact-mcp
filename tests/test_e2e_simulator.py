@@ -8,7 +8,6 @@ import pytest
 import asyncio
 from pathlib import Path
 import sys
-import time
 import subprocess
 import re
 from PIL import Image
@@ -42,7 +41,6 @@ class TestSimulatorE2E:
 
         assert observation.windows, "No simulator windows found"
         print(f"✅ Found {len(observation.windows)} simulator window(s)")
-        print(f"   Fullscreen: {observation.is_fullscreen}")
 
         # Take screenshot in current state
         print("\n📸 Taking screenshot...")
@@ -76,81 +74,48 @@ class TestSimulatorE2E:
                         screen_height = int(match.group(2))
                     break
 
-        print(f"\n   📊 Analysis:")
-        print(
-            f"      Window bounds: {observation.active_window.bounds if observation.active_window else 'N/A'}"
+        print("\n   📊 Analysis:")
+        window_bounds = (
+            observation.active_window.bounds if observation.active_window else "N/A"
         )
+        print(f"      Window bounds: {window_bounds}")
         print(f"      Screenshot dimensions: {width}x{height}")
         if screen_width and screen_height:
             print(f"      Screen dimensions: {screen_width}x{screen_height}")
-            print(
-                f"      Screenshot is fullscreen-sized: {width >= screen_width * 0.8 and height >= screen_height * 0.8}"
-            )
-            print(
-                f"      Coverage: {(width/screen_width)*100:.1f}% x {(height/screen_height)*100:.1f}%"
-            )
-        print(
-            f"      Current window state: {'Fullscreen' if observation.is_fullscreen else 'Windowed'}"
-        )
-        print(
-            f"      Note: Screenshot was taken in fullscreen mode and window state restored"
-        )
 
         # Small delay to see the effect
         await asyncio.sleep(1)
 
     @pytest.mark.asyncio
-    async def test_windowed_mode_restoration(self):
-        """Test that all operations restore windowed mode."""
+    async def test_windowed_mode_operations(self):
+        """Test that all operations work correctly in windowed mode."""
         # Set up clean starting state
         print("\n🔧 Setting up clean simulator state...")
         await setup_clean_simulator_state()
 
-        print("\n🔄 Testing windowed mode restoration...")
+        print("\n🔄 Testing operations in windowed mode...")
 
-        # Get initial state
-        initial_observation = await observe_simulator()
-        initial_fullscreen = initial_observation.is_fullscreen
-        print(f"   Initial state: {'Fullscreen' if initial_fullscreen else 'Windowed'}")
-
-        # Test save_screenshot restoration
+        # Test save_screenshot
         print("   Testing save_screenshot...")
-        screenshot_path = await save_screenshot("/tmp/e2e_restoration_test.png")
-        after_screenshot = await observe_simulator()
-        print(
-            f"   After screenshot: {'Fullscreen' if after_screenshot.is_fullscreen else 'Windowed'}"
-        )
+        screenshot_path = await save_screenshot("/tmp/e2e_windowed_test.png")
+        print(f"   ✅ Screenshot saved: {screenshot_path}")
 
-        # Test find_text_in_simulator restoration
+        # Test find_text_in_simulator
         print("   Testing find_text_in_simulator...")
-        await find_text_in_simulator("Settings")
-        after_find = await observe_simulator()
-        print(
-            f"   After find_text: {'Fullscreen' if after_find.is_fullscreen else 'Windowed'}"
-        )
+        result = await find_text_in_simulator("Settings")
+        first_line = result.split("\n")[0]
+        print(f"   ✅ Found text: {first_line}")
 
-        # Test click_text_in_simulator restoration
+        # Test click_text_in_simulator
         print("   Testing click_text_in_simulator...")
         # First open Settings to ensure General is available
         await open_settings_app()
         await asyncio.sleep(1)
 
         await click_text_in_simulator("General")
-        after_click = await observe_simulator()
-        print(
-            f"   After click_text: {'Fullscreen' if after_click.is_fullscreen else 'Windowed'}"
-        )
+        print("   ✅ Click completed")
 
-        # Verify restoration
-        if (
-            initial_fullscreen
-            == after_screenshot.is_fullscreen
-            == after_find.is_fullscreen
-            == after_click.is_fullscreen
-        ):
-            print("   ✅ All operations properly restored windowed state!")
-        else:
-            print("   ❌ Some operations failed to restore windowed state!")
+        print("   ✅ All operations work correctly in windowed mode!")
 
         await asyncio.sleep(1)
 
@@ -174,9 +139,9 @@ class TestSimulatorE2E:
             print(f"   {line}")
 
         # Should find General in the Settings app we just opened
-        print(f"\n👆 Attempting to click on 'General'...")
+        print("\n👆 Attempting to click on 'General'...")
         await click_text_in_simulator("General")
-        print(f"✅ Click command sent to 'General'")
+        print("✅ Click command sent to 'General'")
         await asyncio.sleep(1)  # See the effect
 
     @pytest.mark.asyncio
@@ -205,29 +170,33 @@ class TestSimulatorE2E:
             await asyncio.sleep(0.5)
 
     @pytest.mark.asyncio
-    async def test_visual_confirmation(self):
-        """Test that you can visually see fullscreen transitions."""
+    async def test_screenshot_in_windowed_mode(self):
+        """Test that screenshots work correctly in windowed mode."""
         # Set up clean starting state
         print("\n🔧 Setting up clean simulator state...")
         await setup_clean_simulator_state()
 
-        print("\n👀 Testing visual fullscreen transitions...")
-        print("   Watch the simulator window - it should temporarily go fullscreen")
+        print("\n📸 Testing screenshot in windowed mode...")
 
-        initial_state = (await observe_simulator()).is_fullscreen
-        print(f"   Starting state: {'Fullscreen' if initial_state else 'Windowed'}")
+        # Take a screenshot
+        print("   Taking screenshot...")
+        screenshot_path = await save_screenshot("/tmp/e2e_windowed_screenshot.png")
 
-        # Take a screenshot - this will trigger fullscreen transition
-        print("   Taking screenshot (should see fullscreen transition)...")
-        await save_screenshot("/tmp/e2e_visual_test.png")
+        # Verify screenshot exists and has reasonable size
+        from pathlib import Path
 
-        final_state = (await observe_simulator()).is_fullscreen
-        print(f"   Final state: {'Fullscreen' if final_state else 'Windowed'}")
+        screenshot_file = Path(screenshot_path)
+        assert screenshot_file.exists()
+        file_size = screenshot_file.stat().st_size
+        print(f"   ✅ Screenshot saved: {screenshot_path}")
+        print(f"   File size: {file_size:,} bytes")
 
-        if initial_state == final_state:
-            print("   ✅ Visual transition completed and state restored!")
-        else:
-            print("   ❌ State was not properly restored!")
+        # Load and check dimensions
+        with Image.open(screenshot_path) as img:
+            width, height = img.size
+            print(f"   Dimensions: {width}x{height}")
+            assert width > 0 and height > 0
+            print("   ✅ Screenshot has valid dimensions")
 
         await asyncio.sleep(1)
 
