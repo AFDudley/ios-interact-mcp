@@ -6,6 +6,13 @@ via xcrun simctl and xcrun devicectl commands.
 
 This server enables Claude Code to interact with iOS apps on simulators
 and physical devices on macOS using only stock tools.
+
+Architecture Notes:
+- Two clicking mechanisms available:
+  1. AppleScript (click_at_coordinates): Uses System Events, slower but reliable
+  2. Quartz CoreGraphics (tap, swipe): Native mouse events, faster and more flexible
+- Use 'tap' for most interactions, 'click_at_coordinates' for legacy compatibility
+- All gesture tools automatically focus the simulator window before executing
 """
 
 import argparse
@@ -23,7 +30,14 @@ mcp = FastMCP("ios-interact-server")
 
 @mcp.tool()
 async def click_at_coordinates(x: int, y: int, coordinate_space: str = "screen") -> str:
-    """Click at specific coordinates
+    """Click at specific coordinates using AppleScript
+
+    Uses AppleScript/System Events for clicking. Best for:
+    - Simple single clicks
+    - When coordinate space transformation is needed
+    - Compatibility with older automation workflows
+
+    For faster performance or complex gestures (double-tap, swipe), use 'tap' instead.
 
     Args:
         x: X coordinate
@@ -203,7 +217,10 @@ async def press_button(button_name: str) -> str:
 
 @mcp.tool()
 async def swipe(direction: str, distance: float = 200) -> str:
-    """Perform a swipe gesture in the specified direction
+    """Perform a swipe gesture using Quartz CoreGraphics
+
+    Uses native macOS Quartz events for smooth, realistic swipe gestures.
+    Automatically ensures simulator window is focused before swiping.
 
     Args:
         direction: Direction to swipe ('up', 'down', 'left', 'right')
@@ -261,6 +278,26 @@ async def tap_coordinates(x: float, y: float, tap_count: int = 1) -> str:
         return f"Double tapped at ({x}, {y})"
     else:
         return f"Tapped {tap_count} times at ({x}, {y})"
+
+
+@mcp.tool()
+async def tap(x: float, y: float, tap_count: int = 1) -> str:
+    """Tap at specific coordinates using Quartz CoreGraphics
+
+    Uses native macOS Quartz events for tapping. Best for:
+    - Faster performance (no subprocess overhead)
+    - Complex tap patterns (double-tap, triple-tap)
+    - Gesture sequences and automation
+    - More realistic user interaction simulation
+
+    Automatically ensures simulator window is focused before tapping.
+
+    Args:
+        x: X coordinate relative to simulator window
+        y: Y coordinate relative to simulator window
+        tap_count: Number of taps (1 for single tap, 2 for double tap, 3 for triple tap)
+    """
+    return await tap_coordinates(x, y, tap_count)
 
 
 def main():
