@@ -14,7 +14,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ios_interact_mcp.ocr_controller_functional import (
+from ios_interact_mcp.ocr_controller import (
     click_text_in_simulator,
     click_at_coordinates,
     find_text_in_simulator,

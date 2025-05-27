@@ -1,156 +1,391 @@
-#!/usr/bin/env python3
 """
-Controller for xcrun simctl commands.
-Provides interface to iOS Simulator via xcrun simctl.
+Functional XCRun Controller for iOS Simulator interaction.
+
+This module implements a functional programming approach to simulator control,
+emphasizing immutability, pure functions, and explicit side effects.
 """
 
 import asyncio
-import subprocess
-from typing import Tuple
+import re
+from typing import List, Optional, Tuple
+from pathlib import Path
+
+from .interact_types import (
+    SimulatorCommand,
+    CommandResult,
+    App,
+    AppList,
+)
 
 
-class SimulatorController:
-    """Wrapper for xcrun simctl commands"""
+# ============================================================================
+# Pure Functions - No side effects, deterministic
+# ============================================================================
 
-    @staticmethod
-    def run_command(args: list[str]) -> Tuple[bool, str]:
-        """Run a simctl command and return success status and output"""
-        try:
-            result = subprocess.run(
-                ["xcrun", "simctl"] + args, capture_output=True, text=True, check=True
-            )
-            return True, result.stdout
-        except subprocess.CalledProcessError as e:
-            return False, e.stderr or e.stdout or str(e)
 
-    @staticmethod
-    async def run_command_async(args: list[str]) -> Tuple[bool, str]:
-        """Async version of run_command"""
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "xcrun",
-                "simctl",
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await proc.communicate()
+def create_launch_command(
+    bundle_id: str, wait_for_debugger: bool = False
+) -> SimulatorCommand:
+    """Create a command to launch an app."""
+    args = ["launch", bundle_id]
+    if wait_for_debugger:
+        args.extend(["--wait-for-debugger"])
+    return SimulatorCommand(command=args)
 
-            if proc.returncode == 0:
-                return True, stdout.decode().strip()
-            else:
-                error_msg = stderr.decode().strip() or stdout.decode().strip()
-                return False, error_msg
-        except Exception as e:
-            return False, str(e)
 
-    @staticmethod
-    async def launch_app(bundle_id: str) -> Tuple[bool, str]:
-        """Launch an iOS app in the simulator"""
-        success, output = await SimulatorController.run_command_async(
-            ["launch", "booted", bundle_id]
+def create_terminate_command(bundle_id: str) -> SimulatorCommand:
+    """Create a command to terminate an app."""
+    return SimulatorCommand(command=["terminate", bundle_id])
+
+
+def create_list_apps_command() -> SimulatorCommand:
+    """Create a command to list all apps."""
+    return SimulatorCommand(command=["listapps"])
+
+
+def create_open_url_command(url: str) -> SimulatorCommand:
+    """Create a command to open a URL."""
+    return SimulatorCommand(command=["openurl", url])
+
+
+def create_get_app_container_command(
+    bundle_id: str, container_type: str = "data"
+) -> SimulatorCommand:
+    """Create a command to get app container path."""
+    return SimulatorCommand(command=["get_app_container", bundle_id, container_type])
+
+
+def parse_app_from_plist_block(
+    lines: List[str], start_idx: int
+) -> Optional[Tuple[App, int]]:
+    """
+    Parse a single app from plist output starting at given index.
+
+    Returns the parsed App and the index after this app's block,
+    or None if no valid app found.
+    """
+    if start_idx >= len(lines):
+        return None
+
+    line = lines[start_idx].strip()
+
+    # Check if this line starts an app block
+    # The line should contain a quoted bundle ID followed by =     { or = {
+    if '"' not in line or "=" not in line or "{" not in line:
+        return None
+
+    # More flexible parsing for bundle ID
+    parts = line.split('"')
+    if len(parts) < 3:  # Need at least: prefix, bundle_id, suffix
+        return None
+
+    bundle_id = parts[1]  # The bundle ID is between the first pair of quotes
+
+    # Verify this is actually an app block (must have = and { after the bundle ID)
+    after_bundle_id = line.split('"')[-1]
+    if "=" not in after_bundle_id or "{" not in after_bundle_id:
+        return None
+
+    # Parse app properties
+    display_name = None
+    bundle_name = None
+    app_type = None
+
+    idx = start_idx + 1
+    brace_count = 1  # We've seen the opening brace
+
+    while idx < len(lines) and brace_count > 0:
+        line = lines[idx].strip()
+
+        # Count braces to track nesting
+        brace_count += line.count("{") - line.count("}")
+
+        # Parse properties
+        if "CFBundleDisplayName = " in line:
+            try:
+                # Handle quoted values
+                if '"' in line:
+                    display_name = line.split('"')[1]
+                else:
+                    display_name = line.split("= ", 1)[1].strip(" ;")
+            except IndexError:
+                pass
+        elif "CFBundleName = " in line:
+            try:
+                # Handle quoted values
+                if '"' in line:
+                    bundle_name = line.split('"')[1]
+                else:
+                    bundle_name = line.split("= ", 1)[1].strip(" ;")
+            except IndexError:
+                pass
+        elif "ApplicationType = " in line:
+            try:
+                app_type = line.split("= ", 1)[1].strip(' ";')
+            except IndexError:
+                pass
+
+        idx += 1
+
+    # Create app if we have at least a bundle ID
+    if bundle_id and (display_name or bundle_name):
+        app = App(
+            bundle_id=bundle_id,
+            display_name=display_name or bundle_name or bundle_id,
+            bundle_name=bundle_name,
+            app_type=app_type,
         )
-        if success:
-            return True, f"Successfully launched {bundle_id}"
+        return (app, idx)
+
+    return None
+
+
+def parse_app_list(output: str) -> AppList:
+    """
+    Parse simctl listapps output into an AppList.
+
+    This is a pure function that parses the property list format output
+    from 'xcrun simctl listapps'.
+    """
+    if not output or not output.strip():
+        return AppList(apps=())
+
+    lines = output.split("\n")
+    apps = []
+    idx = 0
+
+    while idx < len(lines):
+        result = parse_app_from_plist_block(lines, idx)
+        if result:
+            app, next_idx = result
+            apps.append(app)
+            idx = next_idx
         else:
-            return False, f"Failed to launch {bundle_id}: {output}"
+            idx += 1
 
-    @staticmethod
-    async def terminate_app(bundle_id: str) -> Tuple[bool, str]:
-        """Terminate a running iOS app"""
-        success, output = await SimulatorController.run_command_async(
-            ["terminate", "booted", bundle_id]
-        )
-        if success:
-            return True, f"Successfully terminated {bundle_id}"
-        else:
-            return False, f"Failed to terminate {bundle_id}: {output}"
+    return AppList(apps=tuple(sorted(apps, key=lambda a: a.bundle_id)))
 
-    @staticmethod
-    async def list_apps() -> Tuple[bool, str]:
-        """List all installed apps on the simulator"""
-        success, output = await SimulatorController.run_command_async(
-            ["listapps", "booted"]
-        )
 
-        if success:
-            # The output is in property list format, not JSON
-            # We need to parse it differently
-            apps_list = []
+def format_app_list(app_list: AppList) -> str:
+    """Format an AppList for display."""
+    if not app_list.apps:
+        return "No apps found on the simulator"
 
-            # Simple parsing - look for bundle IDs and names
-            lines = output.split("\n")
-            current_bundle_id = None
-            current_app_name = None
+    lines = [f"Installed apps ({len(app_list.apps)}):"]
+    for app in app_list.apps:
+        lines.append(f"• {app.name} ({app.bundle_id})")
 
-            for line in lines:
-                line = line.strip()
+    return "\n".join(lines)
 
-                # Bundle ID line (e.g., '"com.apple.Bridge" = {')
-                if line.startswith('"') and line.endswith("= {"):
-                    current_bundle_id = line.split('"')[1]
 
-                # Display name line
-                elif "CFBundleDisplayName = " in line:
-                    current_app_name = line.split("= ")[1].strip(' ";')
+def parse_command_success(output: str, error: str, exit_code: int) -> bool:
+    """Determine if a command succeeded based on output and exit code."""
+    # Some commands return 0 even on failure, so check output
+    if exit_code != 0:
+        return False
 
-                # Bundle name line (fallback)
-                elif "CFBundleName = " in line and not current_app_name:
-                    current_app_name = line.split("= ")[1].strip(' ";')
+    # Check for common error patterns
+    error_patterns = [
+        "error:",
+        "Error:",
+        "ERROR:",
+        "failed",
+        "Failed",
+        "FAILED",
+        "An error was encountered",
+        "No devices are booted",
+    ]
 
-                # End of app block
-                elif line == "};" and current_bundle_id and current_app_name:
-                    apps_list.append(f"• {current_app_name} ({current_bundle_id})")
-                    current_bundle_id = None
-                    current_app_name = None
+    combined_output = (output + error).lower()
+    return not any(pattern.lower() in combined_output for pattern in error_patterns)
 
-            if apps_list:
-                return True, f"Installed apps ({len(apps_list)}):\n" + "\n".join(
-                    sorted(apps_list)
-                )
-            else:
-                return True, "No apps found on the simulator"
-        else:
-            return False, f"Failed to list apps: {output}"
 
-    @staticmethod
-    async def open_url(url: str) -> Tuple[bool, str]:
-        """Open a URL in the simulator (useful for deep linking)"""
-        success, output = await SimulatorController.run_command_async(
-            ["openurl", "booted", url]
-        )
-        if success:
-            return True, f"Successfully opened URL: {url}"
-        else:
-            return False, f"Failed to open URL: {output}"
+def extract_app_launch_pid(output: str) -> Optional[int]:
+    """Extract the PID from app launch output."""
+    # simctl launch output format: "com.example.app: <pid>"
+    match = re.search(r": (\d+)", output)
+    if match:
+        return int(match.group(1))
+    return None
 
-    @staticmethod
-    async def get_app_container(
-        bundle_id: str, container_type: str = "data"
-    ) -> Tuple[bool, str]:
-        """Get the app container path for file access"""
-        success, output = await SimulatorController.run_command_async(
-            ["get_app_container", "booted", bundle_id, container_type]
-        )
 
-        if success:
-            container_path = output.strip()
-            return True, f"App container path ({container_type}):\n{container_path}"
-        else:
-            return False, f"Failed to get app container: {output}"
+# ============================================================================
+# Async I/O Functions - Side effects isolated here
+# ============================================================================
 
-    @staticmethod
-    async def press_button(button_name: str) -> Tuple[bool, str]:
-        """Press a hardware button on the simulator"""
-        # Use case-insensitive button name
-        simctl_button = button_name.lower()
 
-        # Use proper simctl command format
-        success, output = await SimulatorController.run_command_async(
-            ["io", "booted", "button", simctl_button]
+async def execute_command(command: SimulatorCommand) -> CommandResult:
+    """
+    Execute a simulator command. This is the ONLY function that performs I/O.
+
+    All simulator interactions go through this single point.
+    """
+    cmd_args = ["xcrun", "simctl"] + command.to_args()
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd_args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
 
-        if success:
-            return True, f"Pressed {button_name} button"
-        else:
-            return False, f"Failed to press button: {output}"
+        stdout_bytes, stderr_bytes = await proc.communicate()
+        stdout = stdout_bytes.decode("utf-8", errors="replace")
+        stderr = stderr_bytes.decode("utf-8", errors="replace")
+
+        # Determine success
+        success = parse_command_success(stdout, stderr, proc.returncode or 0)
+
+        return CommandResult(
+            success=success,
+            output=stdout,
+            error=stderr if stderr else None,
+            exit_code=proc.returncode or 0,
+        )
+
+    except Exception as e:
+        return CommandResult(
+            success=False,
+            output="",
+            error=str(e),
+            exit_code=-1,
+        )
+
+
+# ============================================================================
+# High-Level Functional API - Compose pure functions with I/O
+# ============================================================================
+
+
+async def get_apps() -> AppList:
+    """Get all installed apps on the simulator as structured data."""
+    cmd = create_list_apps_command()
+    result = await execute_command(cmd)
+
+    if not result.success:
+        raise RuntimeError(f"Failed to list apps: {result.error or result.output}")
+
+    return parse_app_list(result.output)
+
+
+async def list_apps() -> str:
+    """List all installed apps on the simulator as formatted text."""
+    app_list = await get_apps()
+    return format_app_list(app_list)
+
+
+async def launch_app(bundle_id: str, wait_for_debugger: bool = False) -> Optional[int]:
+    """Launch an app on the simulator.
+
+    Returns:
+        The process ID of the launched app, or None if PID not available.
+    """
+    cmd = create_launch_command(bundle_id, wait_for_debugger)
+    result = await execute_command(cmd)
+
+    if not result.success:
+        raise RuntimeError(
+            f"Failed to launch {bundle_id}: {result.error or result.output}"
+        )
+
+    return extract_app_launch_pid(result.output)
+
+
+async def terminate_app(bundle_id: str) -> None:
+    """Terminate a running app."""
+    cmd = create_terminate_command(bundle_id)
+    result = await execute_command(cmd)
+
+    if not result.success:
+        raise RuntimeError(
+            f"Failed to terminate {bundle_id}: {result.error or result.output}"
+        )
+
+
+async def open_url(url: str) -> None:
+    """Open a URL in the simulator."""
+    cmd = create_open_url_command(url)
+    result = await execute_command(cmd)
+
+    if not result.success:
+        raise RuntimeError(f"Failed to open URL {url}: {result.error or result.output}")
+
+
+async def get_app_container(bundle_id: str, container_type: str = "data") -> Path:
+    """Get the app container path.
+
+    Returns:
+        Path to the app container directory.
+    """
+    cmd = create_get_app_container_command(bundle_id, container_type)
+    result = await execute_command(cmd)
+
+    if not result.success:
+        raise RuntimeError(
+            f"Failed to get {container_type} container for {bundle_id}: "
+            f"{result.error or result.output}"
+        )
+
+    container_path = result.output.strip()
+    if not container_path:
+        raise RuntimeError(f"Empty container path returned for {bundle_id}")
+
+    return Path(container_path)
+
+
+async def press_button(button_name: str) -> None:
+    """
+    Press a hardware button on the simulator.
+
+    Note: This uses a different approach since 'simctl io button' doesn't exist.
+    We'll need to use device-specific commands or return a helpful message.
+    """
+    # For now, raise an error indicating the limitation
+    # In the future, this could use AppleScript or other methods
+    raise NotImplementedError(
+        f"Button press for '{button_name}' is not directly supported by simctl. "
+        "Consider using keyboard shortcuts or UI automation instead."
+    )
+
+
+# ============================================================================
+# Advanced Functional Compositions
+# ============================================================================
+
+
+async def find_and_launch_app(app_name: str) -> Optional[int]:
+    """Find an app by name and launch it.
+
+    Returns:
+        The process ID of the launched app, or None if PID not available.
+    """
+    # Get app list
+    app_list = await get_apps()
+
+    # Find app
+    app = app_list.find_by_name(app_name)
+
+    if not app:
+        # Try partial match
+        app_name_lower = app_name.lower()
+        app = next((a for a in app_list.apps if app_name_lower in a.name.lower()), None)
+
+    if not app:
+        available_apps = "\n".join(f"• {a.name} ({a.bundle_id})" for a in app_list.apps)
+        raise ValueError(
+            f"App '{app_name}' not found. Available apps:\n{available_apps}"
+        )
+
+    # Launch the app
+    return await launch_app(app.bundle_id)
+
+
+async def launch_app_and_wait(bundle_id: str, wait_time: float = 2.0) -> Optional[int]:
+    """Launch an app and wait for it to start.
+
+    Returns:
+        The process ID of the launched app, or None if PID not available.
+    """
+    pid = await launch_app(bundle_id)
+    await asyncio.sleep(wait_time)
+    return pid

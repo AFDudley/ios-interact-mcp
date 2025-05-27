@@ -1,3 +1,13 @@
 {
-  "pythonPath": "/opt/local/bin/python"
+  "include": [
+    "ios_interact_mcp",
+    "tests"
+  ],
+  "extraPaths": [
+    "/Users/rix/Library/Python/3.13/lib/python/site-packages",
+    "/opt/local/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages"
+  ],
+  "pythonVersion": "3.13",
+  "pythonPlatform": "Darwin",
+  "reportAttributeAccessIssue": false
 }

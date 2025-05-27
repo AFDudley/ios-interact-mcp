@@ -10,7 +10,7 @@ from pathlib import Path
 # Add the project to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ios_interact_mcp.ocr_controller_functional import execute_osascript  # noqa: E402
+from ios_interact_mcp.ocr_controller import execute_osascript  # noqa: E402
 
 
 async def test_simulator_focus():
@@ -36,7 +36,7 @@ async def test_simulator_focus():
         # Try direct keystroke without process targeting
         result = await execute_osascript(
             'tell application "System Events" to keystroke "f" using '
-            '{control down, command down}'
+            "{control down, command down}"
         )
         print(f"   ✅ Keystroke sent: {result.returncode == 0}")
     except Exception as e:
