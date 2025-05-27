@@ -9,13 +9,13 @@ import asyncio
 from typing import List, Tuple, Optional, Union
 
 from Quartz.CoreGraphics import (
-    CGEventCreateMouseEvent,
-    CGEventPost,
-    kCGHIDEventTap,
-    kCGEventLeftMouseDown,
-    kCGEventLeftMouseUp,
-    kCGEventLeftMouseDragged,
-    kCGMouseButtonLeft,
+    CGEventCreateMouseEvent,  # type: ignore[attr-defined]
+    CGEventPost,  # type: ignore[attr-defined]
+    kCGHIDEventTap,  # type: ignore[attr-defined]
+    kCGEventLeftMouseDown,  # type: ignore[attr-defined]
+    kCGEventLeftMouseUp,  # type: ignore[attr-defined]
+    kCGEventLeftMouseDragged,  # type: ignore[attr-defined]
+    kCGMouseButtonLeft,  # type: ignore[attr-defined]
 )
 
 from .interact_types import (

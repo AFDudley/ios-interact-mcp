@@ -5,9 +5,9 @@
   ],
   "extraPaths": [
     "/Users/rix/Library/Python/3.13/lib/python/site-packages",
-    "/opt/local/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages"
+    "/opt/local/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages",
+    "/Users/rix/Library/Python/3.13/lib/python/site-packages/Quartz"
   ],
   "pythonVersion": "3.13",
-  "pythonPlatform": "Darwin",
-  "reportAttributeAccessIssue": false
+  "pythonPlatform": "Darwin"
 }
