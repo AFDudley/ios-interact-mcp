@@ -64,6 +64,14 @@ def parse_app_from_plist_block(
     Returns the parsed App and the index after this app's block,
     or None if no valid app found.
     """
+
+    def handle_quoted_values(line: str) -> str:
+        """Extract value from plist line, handling both quoted and unquoted values."""
+        if '"' in line:
+            return line.split('"')[1]
+        else:
+            return line.split("= ", 1)[1].strip(" ;")
+
     if start_idx >= len(lines):
         return None
 
@@ -103,20 +111,12 @@ def parse_app_from_plist_block(
         # Parse properties
         if "CFBundleDisplayName = " in line:
             try:
-                # Handle quoted values
-                if '"' in line:
-                    display_name = line.split('"')[1]
-                else:
-                    display_name = line.split("= ", 1)[1].strip(" ;")
+                display_name = handle_quoted_values(line)
             except IndexError:
                 pass
         elif "CFBundleName = " in line:
             try:
-                # Handle quoted values
-                if '"' in line:
-                    bundle_name = line.split('"')[1]
-                else:
-                    bundle_name = line.split("= ", 1)[1].strip(" ;")
+                bundle_name = handle_quoted_values(line)
             except IndexError:
                 pass
         elif "ApplicationType = " in line:
@@ -297,6 +297,10 @@ async def terminate_app(bundle_id: str) -> None:
     result = await execute_command(cmd)
 
     if not result.success:
+        # Don't raise error if app simply isn't running
+        if "found nothing to terminate" in (result.error or result.output or ""):
+            return  # Gracefully handle app not running
+
         raise RuntimeError(
             f"Failed to terminate {bundle_id}: {result.error or result.output}"
         )

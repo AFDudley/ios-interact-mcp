@@ -30,6 +30,7 @@ from .interact_types import (
     Window,
 )
 from .ocr_controller import observe_simulator
+import subprocess
 
 
 # ============================================================================
@@ -49,6 +50,70 @@ DIRECTION_UP = (0, -1)
 DIRECTION_DOWN = (0, 1)
 DIRECTION_LEFT = (-1, 0)
 DIRECTION_RIGHT = (1, 0)
+
+# ============================================================================
+# Focus Management
+# ============================================================================
+
+
+async def ensure_simulator_focused() -> None:
+    """Ensure the iOS Simulator window is focused before performing gestures.
+
+    Raises:
+        RuntimeError: If simulator is not focused and cannot be focused
+    """
+    # Check if Simulator app is frontmost
+    try:
+        result = subprocess.run(
+            [
+                "osascript",
+                "-e",
+                'tell application "System Events" to get name of first application process whose frontmost is true',  # noqa: E501,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        frontmost_app = result.stdout.strip()
+
+        # Check if simulator is already focused
+        if "Simulator" in frontmost_app:
+            return
+
+        # Try to focus the simulator
+        focus_result = subprocess.run(
+            ["osascript", "-e", 'tell application "Simulator" to activate'],
+            capture_output=True,
+            text=True,
+        )
+
+        if focus_result.returncode != 0:
+            raise RuntimeError("Failed to activate Simulator application")
+
+        # Wait a moment for focus change to take effect
+        await asyncio.sleep(0.5)
+
+        # Verify simulator is now focused
+        verify_result = subprocess.run(
+            [
+                "osascript",
+                "-e",
+                'tell application "System Events" to get name of first application process whose frontmost is true',  # noqa: E501,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        if "Simulator" not in verify_result.stdout:
+            raise RuntimeError(
+                "Simulator is not focused and could not be focused automatically"
+            )
+
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to check or set simulator focus: {e}")
+
 
 # ============================================================================
 # Pure Functions - No side effects, deterministic
@@ -279,6 +344,9 @@ async def perform_gesture(gesture: Union[TapGesture, SwipeGesture]) -> None:
 
 async def perform_gesture_sequence(sequence: GestureSequence) -> None:
     """Perform a sequence of gestures."""
+    # Ensure simulator is focused before performing gesture sequence
+    await ensure_simulator_focused()
+
     for i, gesture in enumerate(sequence.gestures):
         if i > 0:
             await asyncio.sleep(sequence.delay_between)
@@ -345,6 +413,9 @@ async def swipe_in_direction(
         # Scroll down (swipe up gesture)
         await swipe_in_direction(DIRECTION_UP)
     """
+    # Ensure simulator is focused before performing gesture
+    await ensure_simulator_focused()
+
     window = await get_simulator_window()
     if not window:
         raise RuntimeError("No simulator window found")
@@ -375,6 +446,9 @@ async def tap_at(x: float, y: float, tap_count: int = 1) -> None:
         y: Y coordinate relative to simulator window
         tap_count: Number of taps (1 for single tap, 2 for double tap, etc.)
     """
+    # Ensure simulator is focused before performing gesture
+    await ensure_simulator_focused()
+
     window = await get_simulator_window()
     if not window:
         raise RuntimeError("No simulator window found")
