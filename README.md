@@ -2,6 +2,8 @@
 
 Control iOS simulators through the Model Context Protocol (MCP).
 
+NOTE: This is AI Slop, there are dragons all over the place. I think the majority of the tests are fake or otherwise nonsensical, I have manually tested everything and the only bug I've found is in the complex gestures Claude made.
+
 ## Features
 
 - **Click Actions**: Click on UI elements by text or coordinates using OCR
@@ -69,7 +71,7 @@ To use the MCP server with Claude Code, you need to start it with SSE transport 
    ```bash
    # Start the server on port 8000 (default)
    ios-interact-mcp --transport sse
-   
+
    # Or specify a custom port
    ios-interact-mcp --transport sse --port 37849
    ```
@@ -78,7 +80,7 @@ To use the MCP server with Claude Code, you need to start it with SSE transport 
    ```bash
    # Add the MCP server to Claude Code
    claude mcp add -t sse ios-interact http://localhost:8000/sse
-   
+
    # Or if using a custom port
    claude mcp add -t sse ios-interact http://localhost:37849/sse
    ```
@@ -87,7 +89,7 @@ To use the MCP server with Claude Code, you need to start it with SSE transport 
    ```bash
    # List configured MCP servers
    claude mcp list
-   
+
    # Get details about the ios-interact server
    claude mcp get ios-interact
    ```
