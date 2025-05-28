@@ -2,7 +2,7 @@
 
 ## Overview
 
-The iOS Interact MCP Server provides a bridge between MCP clients (like Claude Desktop) and iOS simulators/devices on macOS. It uses native macOS tools and the Vision framework for UI automation.
+The iOS Interact MCP Server provides a bridge between MCP clients (like Claude Desktop) and iOS simulators on macOS. It uses native macOS tools and the Vision framework for UI automation.
 
 ## Core Components
 
@@ -110,5 +110,4 @@ We use AppleScript for window management because:
 1. **Multi-simulator support**: Better handling of multiple simulators
 2. **Gesture support**: Swipe, pinch, and other gestures
 3. **Video recording**: Capture automation sessions
-4. **Real device support**: Extend beyond simulators
-5. **Performance optimization**: Caching and batching operations
+4. **Performance optimization**: Caching and batching operations

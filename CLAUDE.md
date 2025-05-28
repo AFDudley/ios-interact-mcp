@@ -1,4 +1,4 @@
-# iOS Device Interaction via MCP Server
+# iOS Simulator Interaction via MCP Server
 
 ## Current Session Summary (2025-01-24)
 
@@ -33,11 +33,11 @@ The server now has:
 2. ✅ **Integrated click_text Tool (Step 5)**
    - Combined OCR text finding with clicking
    - Handles multiple text matches with occurrence parameter
-   - Supports device targeting for multiple simulators
+   - Supports simulator targeting for multiple simulators
 
 3. ✅ **Core MCP Tools Available**
    - `click_text` - Click on text found via OCR
-   - `click_at_coordinates` - Click at specific screen/device coordinates
+   - `click_at_coordinates` - Click at specific screen coordinates
    - `find_text_in_simulator` - Find text elements using OCR
    - `list_simulator_windows` - List all simulator windows
 

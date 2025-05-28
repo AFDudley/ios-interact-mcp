@@ -62,7 +62,8 @@ def parse_window_data(output: str) -> List[Window]:
                         width=float(parts[3]),
                         height=float(parts[4]),
                     ),
-                    title=parts[5] if len(parts) > 5 else "",
+                    # Join remaining parts as title (handles titles with commas)
+                    title=", ".join(parts[5:]) if len(parts) > 5 else "",
                 )
                 windows.append(window)
             except (ValueError, IndexError):

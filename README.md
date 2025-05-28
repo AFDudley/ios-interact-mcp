@@ -1,6 +1,6 @@
 # iOS Interact MCP Server
 
-Control iOS simulators and devices through the Model Context Protocol (MCP).
+Control iOS simulators through the Model Context Protocol (MCP).
 
 ## Features
 
@@ -16,7 +16,7 @@ Control iOS simulators and devices through the Model Context Protocol (MCP).
 
 - macOS with Xcode installed
 - Python 3.10 or higher
-- iOS Simulator or connected iOS device
+- iOS Simulator
 - MCP-compatible client (e.g., Claude Desktop)
 
 ## Installation
@@ -61,20 +61,56 @@ ios-interact-mcp
 ios-interact-mcp --transport sse
 ```
 
+### Using with Claude Code
+
+To use the MCP server with Claude Code, you need to start it with SSE transport and then connect Claude Code to it:
+
+1. **Start the SSE server:**
+   ```bash
+   # Start the server on port 8000 (default)
+   ios-interact-mcp --transport sse
+   
+   # Or specify a custom port
+   ios-interact-mcp --transport sse --port 37849
+   ```
+
+2. **Connect Claude Code to the server:**
+   ```bash
+   # Add the MCP server to Claude Code
+   claude mcp add -t sse ios-interact http://localhost:8000/sse
+   
+   # Or if using a custom port
+   claude mcp add -t sse ios-interact http://localhost:37849/sse
+   ```
+
+3. **Verify the connection:**
+   ```bash
+   # List configured MCP servers
+   claude mcp list
+   
+   # Get details about the ios-interact server
+   claude mcp get ios-interact
+   ```
+
+4. **Remove the server (when done):**
+   ```bash
+   claude mcp remove ios-interact -s local
+   ```
+
 ## Available Tools
 
 ### click_text
 Click on text found in the simulator using OCR.
 
 ```typescript
-click_text(text: string, occurrence?: number, device_name?: string)
+click_text(text: string, occurrence?: number, simulator_name?: string)
 ```
 
 ### click_at_coordinates
 Click at specific screen coordinates.
 
 ```typescript
-click_at_coordinates(x: number, y: number, coordinate_space?: "screen" | "device")
+click_at_coordinates(x: number, y: number, coordinate_space?: "screen")
 ```
 
 ### launch_app
@@ -102,7 +138,7 @@ screenshot(filename?: string, return_path?: boolean)
 Find text elements in the simulator using OCR.
 
 ```typescript
-find_text_in_simulator(search_text?: string, device_name?: string)
+find_text_in_simulator(search_text?: string, simulator_name?: string)
 ```
 
 ### list_apps

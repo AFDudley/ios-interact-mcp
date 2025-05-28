@@ -100,9 +100,8 @@ async def screenshot(filename: Optional[str] = None, return_path: bool = True) -
 
     # Ensure the file goes to an accessible location
     if not os.path.isabs(filename):
-        # Default to Desktop for easy user access
-        desktop_path = os.path.expanduser("~/Desktop")
-        filename = os.path.join(desktop_path, filename)
+        # Default to /tmp for temporary storage
+        filename = os.path.join("/tmp/ios-interact", filename)
 
     path = await ocr.save_screenshot(filename)
     if return_path:

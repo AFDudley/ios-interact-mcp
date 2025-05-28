@@ -28,7 +28,7 @@ Enhance the ios-interact MCP server to use osascript for precise control of mult
 - Support for complex gestures
 
 ### 5. xcrun Command Passthrough
-- Direct access to xcrun commands (simctl, devicectl, pasteboard)
+- Direct access to xcrun commands (simctl)
 - Special handling for copy/paste operations
 - Safety checks for allowed commands
 - Full parameter support
